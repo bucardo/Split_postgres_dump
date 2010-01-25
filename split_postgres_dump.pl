@@ -18,7 +18,7 @@ use warnings;
 use Data::Dumper;
 use 5.006000;
 
-our $VERSION = '1.2.2';
+our $VERSION = '1.2.3';
 
 my $USAGE = qq{Usage: $0 dumpfile\n};
 
@@ -29,7 +29,7 @@ my $file = shift or die $USAGE;
 open my $fh, '<', $file or die qq{Could not open "$file": $!\n};
 
 if (<$fh> !~ /^\Q--\E$/
-	or <$fh> !~ /^\-\- PostgreSQL database (?:cluster )dump$/
+	or <$fh> !~ /^\-\- PostgreSQL database (?:cluster )?dump$/
 	or <$fh> !~ /^\Q--\E$/)
 	{
 		die qq{File "$file" does not appear to be a Postgres dump file\n};
