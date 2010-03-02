@@ -42,6 +42,11 @@ open my $afh, '>', $prefile or die qq{Could not open "$prefile": $!\n};
 print {$afh} "--\n-- PostgreSQL database dump (pre-data)\n--\n";
 my $prelines = 3;
 
+(my $datafile = $file) .= '.dataonly';
+open my $dfh, '>', $datafile or die qq{Could not open "$datafile": $!\n};
+print {$dfh} "--\n-- PostgreSQL database dump (data only)\n--\n";
+my $datalines = 3;
+
 (my $postfile = $file) .= '.postdata';
 open my $zfh, '>', $postfile or die qq{Could not open "$postfile": $!\n};
 print {$zfh} "--\n-- PostgreSQL database dump (post-data)\n--\n";
@@ -54,30 +59,36 @@ while (<$fh>) {
 
 	$olines++;
 
-	## New database connection goes to both, and flips to 'pre' mode
+	## New database connection goes to all, and flips to 'pre' mode
 	if (/^\\connect (.+)/) {
 		$lastdb = $1;
 		$mode = 'pre';
 		print {$afh} $_; $prelines++;
+		print {$dfh} $_; $datalines++;
 		print {$zfh} "$_\n"; $postlines+=2;
 		next;
 	}
 
-	## SET strings always go to both
+	## SET strings always go to all
 	if (/^SET \w/) {
 		print {$afh} $_; $prelines++;
+		print {$dfh} $_; $prelines++;
 		print {$zfh} $_; $postlines++;
 		next;
 	}
 
-	## End of a database gets written to both, changes mode to 'end'
+	## End of a database gets written to all, changes mode to 'end'
 	if (/^\Q-- PostgreSQL database dump complete\E$/o) {
 
 		if ('post' eq $mode) {
 			print {$afh} "--\n"; $prelines++;
+			print {$dfh} "--\n"; $prelines++;
 		}
 		print {$afh} "-- PostgreSQL database dump complete (pre-data) DB=$lastdb\n--\n\n";
 		$prelines++;
+
+		print {$dfh} "-- PostgreSQL database dump complete (data) DB=$lastdb\n--\n\n";
+		$datalines++;
 
 		print {$zfh} "-- PostgreSQL database dump complete (post-data) DB=$lastdb\n";
 		$postlines++;
@@ -87,7 +98,7 @@ while (<$fh>) {
 	}
 
 	## If in 'pre' mode, check for anything that might end it
-	## If found, write it only to second file and switch to 'post' mode
+	## If found, write it only to second file and switch to 'post' or 'data' mode
 	if ('pre' eq $mode) {
 
 		## For an ALTER TABLE, we want to keep around all but constraint adding
@@ -107,6 +118,11 @@ while (<$fh>) {
 			print {$zfh} $_;
 			$postlines+=2;
 		}
+		elsif (/^COPY .+ FROM stdin/) {
+			$mode = 'data';
+			print {$dfh} $_;
+			$datalines+=1;
+		}
 		## Default for pre mode is to simply print to the first file
 		else {
 			print {$afh} $_; $prelines++;
@@ -114,6 +130,15 @@ while (<$fh>) {
 
 		## Store the last line in case we need it (e.g. ADD CONSTRAINT above)
 		$lastline = $_;
+		next;
+	}
+
+	if ('data' eq $mode) {
+		print {$dfh} $_; $datalines++;
+		if (/^\\\.$/) {
+			print {$dfh} "\n"; $datalines++;
+			$mode = 'pre';
+		}
 		next;
 	}
 
@@ -134,11 +159,13 @@ while (<$fh>) {
 
 close $fh or die qq{Could not close "$file": $!\n};
 close $afh or die qq{Could not close "$prefile": $!\n};
+close $dfh or die qq{Could not close "$datafile": $!\n};
 close $zfh or die qq{Could not close "$postfile": $!\n};
 
 my $maxfile = length $postfile;
 printf qq{Lines in original file  %-*s : %d\n}, $maxfile, $file, $olines;
 printf qq{Lines in pre-data file  %-*s : %d\n}, $maxfile, $prefile, $prelines;
+printf qq{Lines in data-only file %-*s : %d\n}, $maxfile, $datafile, $datalines;
 printf qq{Lines in post-data file %-*s : %d\n}, $maxfile, $postfile, $postlines;
 
 exit;
