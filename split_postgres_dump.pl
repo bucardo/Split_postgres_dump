@@ -18,7 +18,7 @@ use warnings;
 use Data::Dumper;
 use 5.006000;
 
-our $VERSION = '1.2.3';
+our $VERSION = '1.3.0';
 
 my $USAGE = qq{Usage: $0 dumpfile\n};
 
