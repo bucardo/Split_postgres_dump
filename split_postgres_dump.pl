@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-## Break a Postgres dump file into pre and post files
+## Break a Postgres dump file into pre, data, and post files
 ## This allows you to load the initial schema,
 ## populate the data as a separate step,
 ## and then apply the indexes, constraints, and triggers
@@ -11,18 +11,23 @@
 ## See: http://bucardo.org/wiki/Split_postgres_dump
 
 ## Usage: pg_dumpall --schema-only > dumpfile; split_postgres_dump.pl dumpfile
-## TODO: handle data segments as well
 
 use strict;
 use warnings;
 use Data::Dumper;
 use 5.006000;
 
-our $VERSION = '1.3.0';
+our $VERSION = '1.3.1';
 
 my $USAGE = qq{Usage: $0 dumpfile\n};
 
 my $file = shift or die $USAGE;
+
+if ($file =~ /\-+version/i) {
+	print "$0 version $VERSION\n";
+	exit 0;
+}
+
 
 -e $file or die qq{No such file: $file\n};
 
