@@ -60,46 +60,61 @@ my $postlines = 3;
 my $lastline = '';
 my $mode = 'pre';
 my $lastdb = '?';
+my $inside_func = 0;
 while (<$fh>) {
 
 	$olines++;
 
-	## New database connection goes to all, and flips to 'pre' mode
-	if (/^\\connect (.+)/) {
-		$lastdb = $1;
-		$mode = 'pre';
-		print {$afh} $_; $prelines++;
-		print {$dfh} $_; $datalines++;
-		print {$zfh} "$_\n"; $postlines+=2;
-		next;
-	}
-
-	## SET strings always go to all
-	if (/^SET \w/) {
-		print {$afh} $_; $prelines++;
-		print {$dfh} $_; $prelines++;
-		print {$zfh} $_; $postlines++;
-		next;
-	}
-
-	## End of a database gets written to all, changes mode to 'end'
-	if (/^\Q-- PostgreSQL database dump complete\E$/o) {
-
-		if ('post' eq $mode) {
-			print {$afh} "--\n"; $prelines++;
-			print {$dfh} "--\n"; $prelines++;
+	if ($inside_func) {
+		if ($_ eq "\$_\$;\n") {
+			$inside_func = 0;
 		}
-		print {$afh} "-- PostgreSQL database dump complete (pre-data) DB=$lastdb\n--\n\n";
-		$prelines++;
+	}
+	else {
 
-		print {$dfh} "-- PostgreSQL database dump complete (data) DB=$lastdb\n--\n\n";
-		$datalines++;
+		if ($lastline =~ /^    LANGUAGE \w+$/o
+			and index($_,'    AS $_$')==0
+			) {
+			$inside_func = 1;
+		}
 
-		print {$zfh} "-- PostgreSQL database dump complete (post-data) DB=$lastdb\n";
-		$postlines++;
+		## New database connection goes to all, and flips to 'pre' mode
+		if (/^\\connect (.+)/o) {
+			$lastdb = $1;
+			$mode = 'pre';
+			print {$afh} $_; $prelines++;
+			print {$dfh} $_; $datalines++;
+			print {$zfh} "$_\n"; $postlines+=2;
+			next;
+		}
 
-		$mode = 'end';
-		next;
+		## SET strings always go to all
+		if (/^SET \w/o) {
+			print {$afh} $_; $prelines++;
+			print {$dfh} $_; $prelines++;
+			print {$zfh} $_; $postlines++;
+			next;
+		}
+
+		## End of a database gets written to all, changes mode to 'end'
+		if (/^\Q-- PostgreSQL database dump complete\E$/o) {
+
+			if ('post' eq $mode) {
+				print {$afh} "--\n"; $prelines++;
+				print {$dfh} "--\n"; $prelines++;
+			}
+			print {$afh} "-- PostgreSQL database dump complete (pre-data) DB=$lastdb\n--\n\n";
+			$prelines++;
+
+			print {$dfh} "-- PostgreSQL database dump complete (data) DB=$lastdb\n--\n\n";
+			$datalines++;
+
+			print {$zfh} "-- PostgreSQL database dump complete (post-data) DB=$lastdb\n";
+			$postlines++;
+
+			$mode = 'end';
+			next;
+		}
 	}
 
 	## If in 'pre' mode, check for anything that might end it
@@ -107,7 +122,7 @@ while (<$fh>) {
 	if ('pre' eq $mode) {
 
 		## For an ALTER TABLE, we want to keep around all but constraint adding
-		if (/^\s+ADD CONSTRAINT .* PRIMARY KEY/o) {
+		if (/^\s+ADD CONSTRAINT .* PRIMARY KEY/o and !$inside_func) {
 			$mode = 'post';
 			print {$zfh} "$lastline$_";
 			$postlines += 3;
@@ -118,12 +133,12 @@ while (<$fh>) {
 			truncate $afh, tell($afh);
 		}
 		## A new index or rule indicates we need to switch to 'post' mode
-		elsif (/^CREATE (?:UNIQUE )?(?:INDEX|RULE).+/) {
+		elsif (/^CREATE (?:UNIQUE )?(?:INDEX|RULE).+/ and !$inside_func) {
 			$mode = 'post';
 			print {$zfh} $_;
 			$postlines+=2;
 		}
-		elsif (/^COPY .+ FROM stdin/) {
+		elsif (/^COPY .+ FROM stdin/ and !$inside_func) {
 			$mode = 'data';
 			print {$dfh} $_;
 			$datalines+=1;
