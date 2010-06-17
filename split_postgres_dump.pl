@@ -121,8 +121,8 @@ while (<$fh>) {
 	## If found, write it only to second file and switch to 'post' or 'data' mode
 	if ('pre' eq $mode) {
 
-		## For an ALTER TABLE, we want to keep around all but constraint adding
-		if (/^\s+ADD CONSTRAINT .* PRIMARY KEY/o and !$inside_func) {
+		## We end if we see an PRIMARY KEY setting (which spans two lines)
+		if (!$inside_func and /^\s+ADD CONSTRAINT .* PRIMARY KEY/o) {
 			$mode = 'post';
 			print {$zfh} "$lastline$_";
 			$postlines += 3;
@@ -131,6 +131,12 @@ while (<$fh>) {
 			seek $afh, -$size, 1;
 			$prelines--;
 			truncate $afh, tell($afh);
+		}
+		## We end if we see an ALTER COLUMN command (which spans a single line)
+		if (!$inside_func and /^ALTER TABLE.+ALTER COLUMN/o) {
+			$mode = 'post';
+			print {$zfh} $_;
+			$postlines += 2;
 		}
 		## A new index or rule indicates we need to switch to 'post' mode
 		elsif (/^CREATE (?:UNIQUE )?(?:INDEX|RULE).+/ and !$inside_func) {
