@@ -121,19 +121,8 @@ while (<$fh>) {
 	## If found, write it only to second file and switch to 'post' or 'data' mode
 	if ('pre' eq $mode) {
 
-		## We end if we see an PRIMARY KEY setting (which spans two lines)
-		if (!$inside_func and /^\s+ADD CONSTRAINT .* PRIMARY KEY/o) {
-			$mode = 'post';
-			print {$zfh} "$lastline$_";
-			$postlines += 3;
-			## Subtract the last line from pre...
-			my $size = length $lastline;
-			seek $afh, -$size, 1;
-			$prelines--;
-			truncate $afh, tell($afh);
-		}
-		## We end if we see an ALTER COLUMN command (which spans a single line)
-		if (!$inside_func and /^ALTER TABLE.+ALTER COLUMN/o) {
+		## We end if we see an ALTER TABLE ONLY (just perms has no ONLY)
+		if (!$inside_func and /^ALTER TABLE ONLY/o) {
 			$mode = 'post';
 			print {$zfh} $_;
 			$postlines += 2;
